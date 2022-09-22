@@ -3,7 +3,11 @@
 # https://github.com/Nyr/openvpn-install
 #
 # Copyright (c) 2013 Nyr. Released under the MIT License.
+#
+# Patched to allow emails 
 
+# Email regexp
+email_rex="^[a-z0-9!#\$%&'*+/=?^_\`{|}~-]+(\.[a-z0-9!#$%&'*+/=?^_\`{|}~-]+)*@([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]*[a-z0-9])?\$"
 
 # Detect Debian users running the script with "sh" instead of bash
 if readlink /proc/$$/exe | grep -q "dash"; then
@@ -200,6 +204,11 @@ if [[ ! -e /etc/openvpn/server/server.conf ]]; then
 	# Allow a limited set of characters to avoid conflicts
 	client=$(sed 's/[^0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-]/_/g' <<< "$unsanitized_client")
 	[[ -z "$client" ]] && client="client"
+	if [[ $unsanitized_client =~ $email_rex ]]; then
+		client_email=$unsanitized_client
+	else
+		client_email="$client@local.host"
+	fi
 	echo
 	echo "OpenVPN installation is ready to begin."
 	# Install a firewall if firewalld or iptables are not already available
@@ -245,7 +254,7 @@ LimitNPROC=infinity" > /etc/systemd/system/openvpn-server@server.service.d/disab
 	./easyrsa init-pki
 	./easyrsa --batch build-ca nopass
 	EASYRSA_CERT_EXPIRE=3650 ./easyrsa build-server-full server nopass
-	EASYRSA_CERT_EXPIRE=3650 ./easyrsa build-client-full "$client" nopass
+	EASYRSA_CERT_EXPIRE=3650 EASYRSA_DN=org EASYRSA_REQ_EMAIL=$client_email ./easyrsa build-client-full "$client" nopass
 	EASYRSA_CRL_DAYS=3650 ./easyrsa gen-crl
 	# Move the stuff we need
 	cp pki/ca.crt pki/private/ca.key pki/issued/server.crt pki/private/server.key pki/crl.pem /etc/openvpn/server
@@ -460,8 +469,13 @@ else
 				read -p "Name: " unsanitized_client
 				client=$(sed 's/[^0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-]/_/g' <<< "$unsanitized_client")
 			done
+			if [[ $unsanitized_client =~ $email_rex ]]; then
+				client_email=$unsanitized_client
+			else
+				client_email="$client@local.host"
+			fi
 			cd /etc/openvpn/server/easy-rsa/
-			EASYRSA_CERT_EXPIRE=3650 ./easyrsa build-client-full "$client" nopass
+			EASYRSA_CERT_EXPIRE=3650 EASYRSA_DN=org EASYRSA_REQ_EMAIL=$client_email ./easyrsa build-client-full "$client" nopass
 			# Generates the custom client.ovpn
 			new_client
 			echo
@@ -479,13 +493,13 @@ else
 			fi
 			echo
 			echo "Select the client to revoke:"
-			tail -n +2 /etc/openvpn/server/easy-rsa/pki/index.txt | grep "^V" | cut -d '=' -f 2 | nl -s ') '
+			tail -n +2 /etc/openvpn/server/easy-rsa/pki/index.txt | grep "^V" | grep -o -P '(?<=CN\=).*?(?=\/)' | nl -s ') '
 			read -p "Client: " client_number
 			until [[ "$client_number" =~ ^[0-9]+$ && "$client_number" -le "$number_of_clients" ]]; do
 				echo "$client_number: invalid selection."
 				read -p "Client: " client_number
 			done
-			client=$(tail -n +2 /etc/openvpn/server/easy-rsa/pki/index.txt | grep "^V" | cut -d '=' -f 2 | sed -n "$client_number"p)
+			client=$(tail -n +2 /etc/openvpn/server/easy-rsa/pki/index.txt | grep "^V" | grep -o -P '(?<=CN\=).*?(?=\/)' | sed -n "$client_number"p)
 			echo
 			read -p "Confirm $client revocation? [y/N]: " revoke
 			until [[ "$revoke" =~ ^[yYnN]*$ ]]; do
