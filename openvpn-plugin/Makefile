@@ -13,12 +13,14 @@ okta_openvpn.so: okta_openvpn.o
 
 install: okta_openvpn.so
 	mkdir -p $(DESTDIR)$(PREFIX)
+	pip install -r requirements.txt
 	install -c okta_openvpn.so -m 755 $(DESTDIR)$(PREFIX)
 	install -c okta_openvpn.py -m 755 $(DESTDIR)$(PREFIX)
 
 uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/okta_openvpn.so
 	rm -f $(DESTDIR)$(PREFIX)/okta_openvpn.py
+	pip uninstall -r requirements.txt
 
 clean:
 	rm -f *.so *.o

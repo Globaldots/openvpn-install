@@ -1,0 +1,3 @@
+okta
+boto3
+ec2_metadata
